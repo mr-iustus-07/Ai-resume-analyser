@@ -1,0 +1,25 @@
+{
+  "name": "ai-resume-analyzer-saas",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Production-ready AI Resume Analyzer SaaS monorepo",
+  "workspaces": [
+    "client",
+    "server",
+    "shared"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w server & npm run dev -w client",
+    "dev:client": "npm run dev -w client",
+    "dev:server": "npm run dev -w server",
+    "build": "npm run build -w shared && npm run build -w server && npm run build -w client",
+    "lint": "npm run lint -w shared && npm run lint -w server && npm run lint -w client",
+    "format": "prettier --write ."
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "devDependencies": {
+    "prettier": "^3.3.3"
+  }
+}
