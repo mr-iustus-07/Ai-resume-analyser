@@ -38,6 +38,42 @@ type UploadResponse = {
   size: number;
 };
 
+type ParsedResume = {
+  personal: {
+    name: string;
+    email: string;
+    phone: string;
+    location: string;
+    linkedin: string;
+    github: string;
+    website: string;
+  };
+  summary: string;
+  skills: string[];
+  softSkills: string[];
+  education: Array<Record<string, unknown>>;
+  experience: Array<Record<string, unknown>>;
+  projects: Array<Record<string, unknown>>;
+  certifications: Array<Record<string, unknown>>;
+  languages: string[];
+  achievements: string[];
+  confidence: Record<string, number>;
+};
+
+type ParserErrorResponse = {
+  success: false;
+  error?: {
+    code?: string;
+    message?: string;
+  };
+  message?: string;
+};
+
+type ParserSuccessResponse = {
+  success: true;
+  data: ParsedResume;
+};
+
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   const kb = bytes / 1024;
@@ -53,6 +89,12 @@ function UploadResumePage() {
   const [error, setError] = useState<string | null>(null);
   const [uploadedAt, setUploadedAt] = useState<string | null>(null);
   const [uploadResult, setUploadResult] = useState<UploadResponse | null>(null);
+  const [parsedResume, setParsedResume] = useState<ParsedResume | null>(null);
+  const [parseError, setParseError] = useState<string | null>(null);
+  const [parseIssueType, setParseIssueType] = useState<
+    'upload' | 'parser' | 'extraction' | 'normalization' | null
+  >(null);
+  const [showRawJson, setShowRawJson] = useState(false);
 
   const extension = useMemo(() => {
     if (!selectedFile) return '';
@@ -82,6 +124,10 @@ function UploadResumePage() {
     setUploadResult(null);
     setUploadedAt(null);
     setProgress(0);
+    setParsedResume(null);
+    setParseError(null);
+    setParseIssueType(null);
+    setShowRawJson(false);
   };
 
   const clearSelection = () => {
@@ -91,6 +137,10 @@ function UploadResumePage() {
     setProgress(0);
     setError(null);
     setUploadStatus('idle');
+    setParsedResume(null);
+    setParseError(null);
+    setParseIssueType(null);
+    setShowRawJson(false);
   };
 
   const handleUpload = async () => {
@@ -123,6 +173,54 @@ function UploadResumePage() {
       setUploadStatus('success');
       setUploadedAt(new Date().toLocaleString());
       setProgress(100);
+
+      try {
+        const parseResponse = await axios.post<ParserSuccessResponse | ParserErrorResponse>(
+          '/api/v1/parser',
+          { uploadId: response.data.uploadId },
+          {
+            headers: { 'Content-Type': 'application/json' },
+          },
+        );
+
+        if ('success' in parseResponse.data && parseResponse.data.success) {
+          setParsedResume(parseResponse.data.data);
+          setParseError(null);
+          setParseIssueType(null);
+          setShowRawJson(false);
+        } else {
+          setParsedResume(null);
+          setParseError(
+            parseResponse.data.error?.message ??
+              parseResponse.data.message ??
+              'Parser returned an unexpected error.',
+          );
+          setParseIssueType('parser');
+        }
+      } catch (parseErr) {
+        const parserAxiosError = parseErr as AxiosError<ParserErrorResponse>;
+        const code = parserAxiosError.response?.data?.error?.code;
+        const message =
+          parserAxiosError.response?.data?.error?.message ??
+          parserAxiosError.response?.data?.message ??
+          parserAxiosError.message ??
+          'Parsing failed due to an unexpected error.';
+
+        setParsedResume(null);
+        setParseError(message);
+
+        if (
+          code === 'UPLOAD_NOT_FOUND' ||
+          code === 'MISSING_UPLOAD_ID' ||
+          code === 'UNSUPPORTED_FILE_TYPE'
+        ) {
+          setParseIssueType('upload');
+        } else if (code === 'CORRUPTED_FILE' || code === 'EMPTY_RESUME') {
+          setParseIssueType('parser');
+        } else {
+          setParseIssueType('extraction');
+        }
+      }
     } catch (err) {
       const axiosError = err as AxiosError<{ message?: string }>;
       const message =
@@ -131,6 +229,7 @@ function UploadResumePage() {
         'Upload failed due to an unexpected error.';
       setError(message);
       setUploadStatus('error');
+      setParseIssueType('upload');
     }
   };
 
@@ -185,11 +284,65 @@ function UploadResumePage() {
             />
           </div>
         </UploadCard>
+        {parseError && (
+          <div className="glass-panel rounded-2xl border border-rose-400/30 p-4 text-sm text-rose-700 dark:text-rose-300">
+            <p className="font-semibold">Parsing failed</p>
+            <p className="mt-1">{parseError}</p>
+            <p className="mt-1 text-xs uppercase tracking-wide opacity-80">
+              Issue Type: {parseIssueType ?? 'parser'}
+            </p>
+          </div>
+        )}
 
-        {uploadResult && (
-          <div className="glass-panel rounded-2xl border border-emerald-400/30 p-4 text-sm text-emerald-700 dark:text-emerald-300">
-            Upload ready. ID: <span className="font-mono">{uploadResult.uploadId}</span> · File:{' '}
-            {uploadResult.filename} · Size: {formatBytes(uploadResult.size)}
+        {parsedResume && (
+          <div className="space-y-4">
+            <div className="glass-panel rounded-2xl border border-cyan-400/30 p-5">
+              <h2 className="text-lg font-semibold text-cyan-700 dark:text-cyan-300">
+                Resume Parsed Successfully
+              </h2>
+              <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                <div className="rounded-xl border border-slate-300/60 bg-white/50 p-3 dark:border-slate-700 dark:bg-slate-900/40">
+                  <p className="text-xs uppercase tracking-wide text-slate-500">Name</p>
+                  <p className="mt-1 text-sm font-medium">{parsedResume.personal.name || '—'}</p>
+                </div>
+                <div className="rounded-xl border border-slate-300/60 bg-white/50 p-3 dark:border-slate-700 dark:bg-slate-900/40">
+                  <p className="text-xs uppercase tracking-wide text-slate-500">Email</p>
+                  <p className="mt-1 text-sm font-medium">{parsedResume.personal.email || '—'}</p>
+                </div>
+                <div className="rounded-xl border border-slate-300/60 bg-white/50 p-3 dark:border-slate-700 dark:bg-slate-900/40">
+                  <p className="text-xs uppercase tracking-wide text-slate-500">Phone</p>
+                  <p className="mt-1 text-sm font-medium">{parsedResume.personal.phone || '—'}</p>
+                </div>
+                <div className="rounded-xl border border-slate-300/60 bg-white/50 p-3 dark:border-slate-700 dark:bg-slate-900/40">
+                  <p className="text-xs uppercase tracking-wide text-slate-500">Skills</p>
+                  <p className="mt-1 text-sm font-medium">{parsedResume.skills.length}</p>
+                </div>
+                <div className="rounded-xl border border-slate-300/60 bg-white/50 p-3 dark:border-slate-700 dark:bg-slate-900/40">
+                  <p className="text-xs uppercase tracking-wide text-slate-500">Education</p>
+                  <p className="mt-1 text-sm font-medium">{parsedResume.education.length}</p>
+                </div>
+                <div className="rounded-xl border border-slate-300/60 bg-white/50 p-3 dark:border-slate-700 dark:bg-slate-900/40">
+                  <p className="text-xs uppercase tracking-wide text-slate-500">Experience</p>
+                  <p className="mt-1 text-sm font-medium">{parsedResume.experience.length}</p>
+                </div>
+                <div className="rounded-xl border border-slate-300/60 bg-white/50 p-3 dark:border-slate-700 dark:bg-slate-900/40">
+                  <p className="text-xs uppercase tracking-wide text-slate-500">Projects</p>
+                  <p className="mt-1 text-sm font-medium">{parsedResume.projects.length}</p>
+                </div>
+                <div className="rounded-xl border border-slate-300/60 bg-white/50 p-3 dark:border-slate-700 dark:bg-slate-900/40">
+                  <p className="text-xs uppercase tracking-wide text-slate-500">Certifications</p>
+                  <p className="mt-1 text-sm font-medium">{parsedResume.certifications.length}</p>
+                </div>
+                <div className="rounded-xl border border-slate-300/60 bg-white/50 p-3 dark:border-slate-700 dark:bg-slate-900/40">
+                  <p className="text-xs uppercase tracking-wide text-slate-500">Languages</p>
+                  <p className="mt-1 text-sm font-medium">{parsedResume.languages.length}</p>
+                </div>
+                <div className="rounded-xl border border-slate-300/60 bg-white/50 p-3 dark:border-slate-700 dark:bg-slate-900/40 sm:col-span-2 lg:col-span-3">
+                  <p className="text-xs uppercase tracking-wide text-slate-500">Achievements</p>
+                  <p className="mt-1 text-sm font-medium">{parsedResume.achievements.length}</p>
+                </div>
+              </div>
+            </div>
           </div>
         )}
       </div>

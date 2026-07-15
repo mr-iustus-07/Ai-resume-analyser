@@ -4,8 +4,8 @@ import {
   LoginSchema,
   RefreshTokenSchema,
   RegisterSchema,
-} from '@/modules/auth/auth.schema.js';
-import { AuthService } from '@/modules/auth/auth.service.js';
+} from './auth.schema.js';
+import { AuthService } from './auth.service.js';
 
 const authService = new AuthService();
 

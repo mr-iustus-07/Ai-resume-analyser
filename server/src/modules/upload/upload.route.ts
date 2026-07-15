@@ -6,7 +6,7 @@ import {
   UploadValidationError,
   createUploadResponse,
   validateUploadFile,
-} from './upload.service';
+} from './upload.service.js';
 
 const uploadRouter = Router();
 
@@ -18,10 +18,10 @@ const upload = multer({
   },
 });
 
-uploadRouter.post('/', upload.single('resume'), (req, res) => {
+uploadRouter.post('/', upload.single('resume'), async (req, res) => {
   try {
     const validFile = validateUploadFile(req.file);
-    const response = createUploadResponse(validFile);
+    const response = await createUploadResponse(validFile);
 
     return res.status(200).json(response);
   } catch (error) {

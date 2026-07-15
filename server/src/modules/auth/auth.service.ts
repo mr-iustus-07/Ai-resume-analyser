@@ -1,9 +1,9 @@
 import bcrypt from 'bcryptjs';
 import jwt, { type Secret, type SignOptions } from 'jsonwebtoken';
 
-import { env } from '@/config/env.js';
-import { prisma } from '@/lib/prisma.js';
-import type { LoginInput, RegisterInput } from '@/modules/auth/auth.schema.js';
+import { env } from '../../config/env.js';
+import { prisma } from '../../lib/prisma.js';
+import type { LoginInput, RegisterInput } from './auth.schema.js';
 
 const ACCESS_TOKEN_TYPE = 'access';
 const REFRESH_TOKEN_TYPE = 'refresh';
